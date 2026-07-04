@@ -25,10 +25,13 @@
   - [Create Ticket](#post-apitickets)
   - [Update Ticket](#put-apiticketsid)
   - [Delete Ticket](#delete-apiticketsid)
+- [Settings Endpoints](#settings-endpoints)
+  - [Get Settings Pages](#get-apisettings)
 - [Module Endpoints](#module-endpoints)
   - [Create Module](#post-apimodules)
   - [List Modules](#get-apimodules)
   - [Get Module](#get-apimodulesapiname)
+  - [Edit Module](#put-apimodulesapiname)
   - [Delete Module](#delete-apimodulesapiname)
 - [Field Endpoints](#field-endpoints)
   - [Add Field](#post-apimodulesapinamefields)
@@ -627,6 +630,47 @@ Empty body.
 
 ---
 
+## Settings Endpoints
+
+The Settings API returns a static registry of all available settings pages — what pages exist, their actions, and what field types are supported. No authentication is required beyond the `X-Tenant-Id` header.
+
+### `GET /api/settings`
+
+Returns all available settings pages and their supported actions.
+
+#### Response `200 OK`
+
+```json
+{
+  "count": 1,
+  "pages": [
+    {
+      "key": "modules",
+      "title": "Module Manager",
+      "description": "Create and configure custom modules with their fields",
+      "actions": [
+        { "key": "create_module", "label": "Create Module",  "method": "POST",   "endpoint": "/api/modules" },
+        { "key": "edit_module",   "label": "Edit Module",    "method": "PUT",    "endpoint": "/api/modules/{apiName}" },
+        { "key": "add_field",     "label": "Add Field",      "method": "POST",   "endpoint": "/api/modules/{apiName}/fields" },
+        { "key": "delete_field",  "label": "Delete Field",   "method": "DELETE", "endpoint": "/api/modules/{apiName}/fields/{fieldApiName}" }
+      ],
+      "fieldTypes": ["TEXT", "TEXT_AREA", "PHONE_NO", "EMAIL", "DATE", "NUMBER", "CHECKBOX", "CURRENCY", "URL", "AUTO_NUMBER"]
+    }
+  ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `count` | Total number of settings pages currently available |
+| `pages[].key` | Unique identifier for the page — use to route the UI |
+| `pages[].actions` | List of backend operations the UI should expose for this page |
+| `pages[].fieldTypes` | Field types the user can pick when creating fields on a module |
+
+> Use this endpoint at app startup to dynamically build your settings navigation. Adding new setting pages in a future backend release will be reflected here without a UI code change.
+
+---
+
 ## Module Endpoints
 
 Custom Modules let you define new entity types (like "Properties", "Orders") with their own fields and records. System modules (Contacts, Tickets) cannot be created or deleted via this API.
@@ -746,6 +790,33 @@ Returns a single module with its full field definitions.
 
 ---
 
+### `PUT /api/modules/{apiName}`
+
+Updates the display name of an existing module. The `apiName` and physical `tableName` cannot be changed after creation.
+
+#### Request Body
+
+```json
+{ "displayName": "Real Estate Properties" }
+```
+
+| Field | Required | Notes |
+|---|---|---|
+| `displayName` | yes | New human-readable label |
+
+#### Response `200 OK`
+
+Updated [Module Object](#module-object).
+
+#### Error Responses
+
+| Status | When |
+|---|---|
+| `400` | `displayName` is blank |
+| `404` | Module not found |
+
+---
+
 ### `DELETE /api/modules/{apiName}`
 
 Soft-deletes the module (`active = false`). The physical database table is **not** dropped — data is preserved. System modules (`SYSTEM` type) cannot be deleted.
@@ -783,17 +854,16 @@ Fields define the schema of a custom module. Adding a field adds a column to the
 
 | `fieldType` | PostgreSQL column | Notes |
 |---|---|---|
-| `TEXT` | `TEXT` | Unlimited text |
-| `NUMBER` | `NUMERIC(20,4)` | Decimal numbers |
-| `DATE` | `DATE` | Date only (no time) |
-| `DATETIME` | `TIMESTAMP` | Date and time |
-| `PICKLIST` | `VARCHAR(255)` | Single-select option |
-| `MULTI_PICKLIST` | `TEXT` | Comma-separated or JSON array |
-| `BOOLEAN` | `BOOLEAN` | true / false |
+| `TEXT` | `VARCHAR(255)` | Short single-line text — names, labels, status values |
+| `TEXT_AREA` | `TEXT` | Long multi-line text — descriptions, notes, comments |
+| `PHONE_NO` | `VARCHAR(50)` | Phone number |
 | `EMAIL` | `VARCHAR(255)` | Email address |
-| `PHONE` | `VARCHAR(50)` | Phone number |
-| `URL` | `VARCHAR(500)` | URL |
-| `LOOKUP` | `UUID` | Foreign key to another record |
+| `DATE` | `DATE` | Calendar date (no time component) |
+| `NUMBER` | `NUMERIC(20,4)` | Decimal numbers — quantities, measurements |
+| `CHECKBOX` | `BOOLEAN` | true / false |
+| `CURRENCY` | `NUMERIC(20,2)` | Monetary value (2 decimal places) |
+| `URL` | `VARCHAR(500)` | Web URL |
+| `AUTO_NUMBER` | `BIGINT GENERATED ALWAYS AS IDENTITY` | System-managed counter — value set by DB |
 
 ---
 
@@ -1023,9 +1093,11 @@ No headers required. Returns server health status.
 | `POST` | `/api/tickets` | JWT | Create ticket |
 | `PUT` | `/api/tickets/{id}` | JWT | Update ticket |
 | `DELETE` | `/api/tickets/{id}` | JWT | Delete ticket |
+| `GET` | `/api/settings` | JWT | Settings pages registry |
 | `POST` | `/api/modules` | JWT | Create custom module |
 | `GET` | `/api/modules` | JWT | List all active modules |
 | `GET` | `/api/modules/{apiName}` | JWT | Get module with fields |
+| `PUT` | `/api/modules/{apiName}` | JWT | Edit module display name |
 | `DELETE` | `/api/modules/{apiName}` | JWT | Soft-delete module |
 | `POST` | `/api/modules/{apiName}/fields` | JWT | Add field to module |
 | `GET` | `/api/modules/{apiName}/fields` | JWT | List active fields |

@@ -34,6 +34,15 @@ public class DynamicField extends BaseEntity {
     private String defaultValue;
 
     public enum FieldType {
-        TEXT, NUMBER, DATE, DATETIME, PICKLIST, MULTI_PICKLIST, LOOKUP, BOOLEAN, EMAIL, PHONE, URL
+        TEXT,
+        TEXT_AREA,
+        PHONE_NO,
+        EMAIL,
+        DATE,
+        NUMBER,
+        CHECKBOX,
+        CURRENCY,
+        URL,
+        AUTO_NUMBER
     }
 }

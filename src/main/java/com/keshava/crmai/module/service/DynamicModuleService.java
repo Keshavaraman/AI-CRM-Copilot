@@ -3,6 +3,7 @@ package com.keshava.crmai.module.service;
 import com.keshava.crmai.common.exception.AppException;
 import com.keshava.crmai.config.cache.CacheInvalidationPublisher;
 import com.keshava.crmai.module.dto.ModuleRequest;
+import com.keshava.crmai.module.dto.UpdateModuleRequest;
 import com.keshava.crmai.module.entity.DynamicModule;
 import com.keshava.crmai.module.repository.DynamicModuleRepository;
 import com.keshava.crmai.multitenancy.TenantContext;
@@ -59,6 +60,15 @@ public class DynamicModuleService {
         return moduleRepository.findByApiName(apiName)
                 .filter(DynamicModule::isActive)
                 .orElseThrow(() -> new AppException("Module '" + apiName + "' not found", HttpStatus.NOT_FOUND));
+    }
+
+    @Transactional(transactionManager = "tenantTransactionManager")
+    public DynamicModule updateModule(String apiName, UpdateModuleRequest request) {
+        DynamicModule module = getModule(apiName);
+        module.setDisplayName(request.displayName());
+        DynamicModule saved = moduleRepository.save(module);
+        cachePublisher.publishClear("moduleMetadata", TenantContext.getCurrentTenant());
+        return saved;
     }
 
     @Transactional(transactionManager = "tenantTransactionManager")

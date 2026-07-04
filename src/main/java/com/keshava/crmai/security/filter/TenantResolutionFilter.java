@@ -6,6 +6,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
@@ -23,7 +24,16 @@ public class TenantResolutionFilter extends OncePerRequestFilter {
 
     public static final String TENANT_HEADER = "X-Tenant-Id";
 
+    private static final Set<String> BYPASS_PREFIXES =
+            Set.of("/swagger-ui", "/v3/api-docs", "/actuator");
+
     private final TenantDataSourceRouter tenantDataSourceRouter;
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getServletPath();
+        return BYPASS_PREFIXES.stream().anyMatch(path::startsWith);
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,

@@ -1,0 +1,1203 @@
+openapi: 3.0.3
+
+info:
+  title: CRMAI Backend API
+  version: 1.0.0
+  description: |
+    Multi-tenant CRM AI platform backend.
+
+    ## Authentication
+    Every request except `POST /api/auth/login` requires two headers:
+    - **X-Tenant-Id** — organisation subdomain (e.g. `acme`)
+    - **Authorization: Bearer \<token\>** — JWT issued by `/api/auth/login`
+
+    The JWT encodes `sub` (userId UUID) and a `tenantId` claim that must match
+    the `X-Tenant-Id` header on every subsequent request.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+security:
+  - bearerAuth: []
+  - tenantHeader: []
+
+tags:
+  - name: Auth
+    description: Login and logout
+  - name: Contacts
+    description: CRM contact management
+  - name: Tickets
+    description: Support ticket management
+  - name: Settings
+    description: Application settings pages registry
+  - name: Modules
+    description: Custom module definition (schema)
+  - name: Fields
+    description: Custom field management per module
+  - name: Records
+    description: Dynamic record CRUD for custom modules
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Reusable components
+# ──────────────────────────────────────────────────────────────────────────────
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    tenantHeader:
+      type: apiKey
+      in: header
+      name: X-Tenant-Id
+
+  schemas:
+
+    # ── Auth ──────────────────────────────────────────────────────────────────
+    AuthRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: john@acme.com
+        password:
+          type: string
+          format: password
+          example: secret123
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT token — include as `Authorization: Bearer <token>`
+        email:
+          type: string
+        userId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          example: acme
+        expiresIn:
+          type: integer
+          description: Token lifetime in milliseconds
+          example: 86400000
+
+    # ── Contacts ──────────────────────────────────────────────────────────────
+    ContactRequest:
+      type: object
+      required: [firstName, lastName]
+      properties:
+        firstName:
+          type: string
+          example: Jane
+        lastName:
+          type: string
+          example: Doe
+        email:
+          type: string
+          format: email
+          example: jane@example.com
+        phone:
+          type: string
+          example: "+1-555-0100"
+        company:
+          type: string
+          example: Acme Corp
+        jobTitle:
+          type: string
+          example: Product Manager
+        description:
+          type: string
+        ownerId:
+          type: string
+          format: uuid
+
+    Contact:
+      allOf:
+        - $ref: '#/components/schemas/ContactRequest'
+        - type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+            createdBy:
+              type: string
+            updatedBy:
+              type: string
+
+    ContactPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/Contact'
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        size:
+          type: integer
+        number:
+          type: integer
+        first:
+          type: boolean
+        last:
+          type: boolean
+        empty:
+          type: boolean
+
+    # ── Tickets ───────────────────────────────────────────────────────────────
+    TicketStatus:
+      type: string
+      enum: [OPEN, IN_PROGRESS, RESOLVED, CLOSED]
+
+    TicketPriority:
+      type: string
+      enum: [LOW, MEDIUM, HIGH, URGENT]
+
+    TicketRequest:
+      type: object
+      required: [subject]
+      properties:
+        subject:
+          type: string
+          example: Cannot export reports
+        description:
+          type: string
+          example: Clicking Export shows a 500 error.
+        status:
+          $ref: '#/components/schemas/TicketStatus'
+        priority:
+          $ref: '#/components/schemas/TicketPriority'
+        assigneeId:
+          type: string
+          format: uuid
+        contactId:
+          type: string
+          format: uuid
+
+    Ticket:
+      allOf:
+        - $ref: '#/components/schemas/TicketRequest'
+        - type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+            createdBy:
+              type: string
+            updatedBy:
+              type: string
+
+    TicketPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ticket'
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        size:
+          type: integer
+        number:
+          type: integer
+        first:
+          type: boolean
+        last:
+          type: boolean
+        empty:
+          type: boolean
+
+    # ── Settings ──────────────────────────────────────────────────────────────
+    SettingAction:
+      type: object
+      properties:
+        key:
+          type: string
+          example: create_module
+        label:
+          type: string
+          example: Create Module
+        method:
+          type: string
+          enum: [GET, POST, PUT, DELETE]
+          example: POST
+        endpoint:
+          type: string
+          example: /api/modules
+
+    SettingsPage:
+      type: object
+      properties:
+        key:
+          type: string
+          example: modules
+        title:
+          type: string
+          example: Module Manager
+        description:
+          type: string
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettingAction'
+        fieldTypes:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldType'
+
+    SettingsResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 1
+        pages:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettingsPage'
+
+    # ── Modules ───────────────────────────────────────────────────────────────
+    ModuleType:
+      type: string
+      enum: [SYSTEM, CUSTOM]
+
+    FieldType:
+      type: string
+      description: |
+        Supported custom field types and their PostgreSQL column mappings:
+        - `TEXT` → VARCHAR(255) — short single-line text
+        - `TEXT_AREA` → TEXT — long multi-line text
+        - `PHONE_NO` → VARCHAR(50) — phone number
+        - `EMAIL` → VARCHAR(255) — email address
+        - `DATE` → DATE — calendar date (no time)
+        - `NUMBER` → NUMERIC(20,4) — decimal number
+        - `CHECKBOX` → BOOLEAN — true/false
+        - `CURRENCY` → NUMERIC(20,2) — monetary value (2 decimal places)
+        - `URL` → VARCHAR(500) — web URL
+        - `AUTO_NUMBER` → BIGINT GENERATED ALWAYS AS IDENTITY — system-managed counter
+      enum:
+        - TEXT
+        - TEXT_AREA
+        - PHONE_NO
+        - EMAIL
+        - DATE
+        - NUMBER
+        - CHECKBOX
+        - CURRENCY
+        - URL
+        - AUTO_NUMBER
+
+    ModuleRequest:
+      type: object
+      required: [apiName, displayName]
+      properties:
+        apiName:
+          type: string
+          pattern: '^[a-z][a-z0-9_]*$'
+          description: Lowercase letters, digits, underscores. Immutable after creation.
+          example: properties
+        displayName:
+          type: string
+          example: Properties
+
+    UpdateModuleRequest:
+      type: object
+      required: [displayName]
+      properties:
+        displayName:
+          type: string
+          example: Real Estate Properties
+
+    DynamicField:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        apiName:
+          type: string
+          example: location
+        displayName:
+          type: string
+          example: Location
+        fieldType:
+          $ref: '#/components/schemas/FieldType'
+        required:
+          type: boolean
+          default: false
+        active:
+          type: boolean
+          default: true
+        defaultValue:
+          type: string
+          nullable: true
+
+    DynamicModule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        apiName:
+          type: string
+          example: properties
+        displayName:
+          type: string
+          example: Properties
+        type:
+          $ref: '#/components/schemas/ModuleType'
+        tableName:
+          type: string
+          description: Physical table name in the tenant DB. Auto-generated as `cm_{apiName}`.
+          example: cm_properties
+        active:
+          type: boolean
+        fields:
+          type: array
+          description: Populated only on GET /api/modules/{apiName}. Empty on list endpoint.
+          items:
+            $ref: '#/components/schemas/DynamicField'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    FieldRequest:
+      type: object
+      required: [apiName, displayName, fieldType]
+      properties:
+        apiName:
+          type: string
+          pattern: '^[a-z][a-z0-9_]*$'
+          description: Becomes the physical column name in the tenant DB. Immutable after creation.
+          example: location
+        displayName:
+          type: string
+          example: Location
+        fieldType:
+          $ref: '#/components/schemas/FieldType'
+        required:
+          type: boolean
+          default: false
+          description: Metadata hint for the UI — does not add a DB NOT NULL constraint.
+        defaultValue:
+          type: string
+          nullable: true
+          description: UI hint only — not enforced at the DB level.
+
+    # ── Records ───────────────────────────────────────────────────────────────
+    DynamicRecord:
+      type: object
+      description: |
+        A row in a custom module's physical table. Keys are the field `apiName` values.
+        System columns are always present.
+      additionalProperties: true
+      properties:
+        id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+        updated_by:
+          type: string
+      example:
+        id: a1b2c3d4-0000-0000-0000-000000000001
+        location: San Francisco
+        price: 1250000.00
+        active_listing: true
+        created_at: "2026-06-07T10:00:00"
+        updated_at: "2026-06-07T10:00:00"
+        created_by: john@acme.com
+        updated_by: john@acme.com
+
+    RecordPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicRecord'
+        totalElements:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        size:
+          type: integer
+        totalPages:
+          type: integer
+
+    # ── Errors ────────────────────────────────────────────────────────────────
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+          example: 404
+        error:
+          type: string
+          example: Not Found
+        message:
+          type: string
+          example: Module 'properties' not found
+        path:
+          type: string
+          example: /api/modules/properties
+
+  responses:
+    Unauthorized:
+      description: Missing, expired, or revoked JWT token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: JWT tenant claim does not match X-Tenant-Id header
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Duplicate key / resource already exists
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BadRequest:
+      description: Validation error or missing required field
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Paths
+# ──────────────────────────────────────────────────────────────────────────────
+paths:
+
+  # ── Auth ────────────────────────────────────────────────────────────────────
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login and obtain a JWT token
+      description: |
+        Authenticate using email and password.
+        The tenant is identified by the `X-Tenant-Id` header — no tenantId in the body.
+        On success, store `token` and attach it as `Authorization: Bearer <token>` on all
+        subsequent requests.
+      security:
+        - tenantHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRequest'
+            example:
+              email: john@acme.com
+              password: secret123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                token: eyJhbGciOiJIUzI1NiJ9...
+                email: john@acme.com
+                userId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                tenantId: acme
+                expiresIn: 86400000
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Invalid email or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke the current JWT token
+      description: |
+        Blacklists the token's `jti` in Redis with a TTL equal to the token's remaining lifetime.
+        All servers immediately reject this token on subsequent requests.
+      responses:
+        '204':
+          description: Token revoked — no body
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ── Contacts ────────────────────────────────────────────────────────────────
+  /api/contacts:
+    get:
+      tags: [Contacts]
+      summary: List contacts (paginated, searchable)
+      parameters:
+        - name: search
+          in: query
+          description: Case-insensitive match across firstName, lastName, email, company
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: sort
+          in: query
+          description: "e.g. `lastName,asc` or `createdAt,desc`"
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated contact list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [Contacts]
+      summary: Create a contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactRequest'
+      responses:
+        '201':
+          description: Contact created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/contacts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags: [Contacts]
+      summary: Get a single contact
+      responses:
+        '200':
+          description: Contact found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Contacts]
+      summary: Update a contact (full replace)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactRequest'
+      responses:
+        '200':
+          description: Contact updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Contacts]
+      summary: Delete a contact
+      responses:
+        '204':
+          description: Deleted — no body
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Tickets ─────────────────────────────────────────────────────────────────
+  /api/tickets:
+    get:
+      tags: [Tickets]
+      summary: List tickets (paginated, filterable by status)
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/TicketStatus'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: sort
+          in: query
+          description: "e.g. `createdAt,desc` or `priority,asc`"
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated ticket list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [Tickets]
+      summary: Create a ticket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketRequest'
+      responses:
+        '201':
+          description: Ticket created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/tickets/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags: [Tickets]
+      summary: Get a single ticket
+      responses:
+        '200':
+          description: Ticket found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Tickets]
+      summary: Update a ticket (full replace)
+      description: |
+        Common patterns — resolve: `{"subject":"...","status":"RESOLVED"}`;
+        reassign: add `"assigneeId":"<uuid>"`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketRequest'
+      responses:
+        '200':
+          description: Ticket updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Tickets]
+      summary: Delete a ticket
+      responses:
+        '204':
+          description: Deleted — no body
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Settings ────────────────────────────────────────────────────────────────
+  /api/settings:
+    get:
+      tags: [Settings]
+      summary: Get all settings pages
+      description: |
+        Returns a static registry of available settings pages, their actions, and supported
+        field types. Call at app startup to dynamically build the settings navigation.
+        New pages added to the backend appear here automatically.
+      responses:
+        '200':
+          description: Settings registry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingsResponse'
+              example:
+                count: 1
+                pages:
+                  - key: modules
+                    title: Module Manager
+                    description: Create and configure custom modules with their fields
+                    actions:
+                      - { key: create_module, label: Create Module, method: POST, endpoint: /api/modules }
+                      - { key: edit_module,   label: Edit Module,   method: PUT,  endpoint: "/api/modules/{apiName}" }
+                      - { key: add_field,     label: Add Field,     method: POST, endpoint: "/api/modules/{apiName}/fields" }
+                      - { key: delete_field,  label: Delete Field,  method: DELETE, endpoint: "/api/modules/{apiName}/fields/{fieldApiName}" }
+                    fieldTypes:
+                      - TEXT
+                      - TEXT_AREA
+                      - PHONE_NO
+                      - EMAIL
+                      - DATE
+                      - NUMBER
+                      - CHECKBOX
+                      - CURRENCY
+                      - URL
+                      - AUTO_NUMBER
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ── Modules ─────────────────────────────────────────────────────────────────
+  /api/modules:
+    post:
+      tags: [Modules]
+      summary: Create a custom module
+      description: |
+        Creates the module metadata row and the physical PostgreSQL table
+        `cm_{apiName}` with base system columns (`id`, `created_at`, `updated_at`,
+        `created_by`, `updated_by`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModuleRequest'
+            example:
+              apiName: properties
+              displayName: Properties
+      responses:
+        '201':
+          description: Module created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DynamicModule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+    get:
+      tags: [Modules]
+      summary: List all active modules
+      description: Returns all active modules. The `fields` array is empty — use GET /{apiName} for full field list.
+      responses:
+        '200':
+          description: Module list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DynamicModule'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/modules/{apiName}:
+    parameters:
+      - name: apiName
+        in: path
+        required: true
+        description: Module API name (e.g. `properties`)
+        schema:
+          type: string
+          pattern: '^[a-z][a-z0-9_]*$'
+
+    get:
+      tags: [Modules]
+      summary: Get a module with its full field list
+      responses:
+        '200':
+          description: Module with fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DynamicModule'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Modules]
+      summary: Edit module display name
+      description: Only `displayName` can be updated. `apiName` and `tableName` are immutable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateModuleRequest'
+            example:
+              displayName: Real Estate Properties
+      responses:
+        '200':
+          description: Module updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DynamicModule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Modules]
+      summary: Soft-delete a module
+      description: |
+        Sets `active = false`. The physical table is **not** dropped — all existing data
+        is preserved. System modules (`type: SYSTEM`) cannot be deleted.
+      responses:
+        '204':
+          description: Module deactivated — no body
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Fields ──────────────────────────────────────────────────────────────────
+  /api/modules/{apiName}/fields:
+    parameters:
+      - name: apiName
+        in: path
+        required: true
+        schema:
+          type: string
+
+    post:
+      tags: [Fields]
+      summary: Add a field to a module
+      description: |
+        Creates the field metadata row and executes
+        `ALTER TABLE cm_{apiName} ADD COLUMN IF NOT EXISTS {apiName} {sqlType}`
+        in the tenant database.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FieldRequest'
+            example:
+              apiName: location
+              displayName: Location
+              fieldType: TEXT
+              required: false
+              defaultValue: null
+      responses:
+        '201':
+          description: Field created and column added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DynamicField'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+    get:
+      tags: [Fields]
+      summary: List active fields for a module
+      responses:
+        '200':
+          description: Field list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DynamicField'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/modules/{apiName}/fields/{fieldApiName}:
+    parameters:
+      - name: apiName
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fieldApiName
+        in: path
+        required: true
+        schema:
+          type: string
+
+    delete:
+      tags: [Fields]
+      summary: Soft-delete a field
+      description: Sets `active = false`. The physical column is **not** dropped — existing data is preserved.
+      responses:
+        '204':
+          description: Field deactivated — no body
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Records ─────────────────────────────────────────────────────────────────
+  /api/modules/{apiName}/records:
+    parameters:
+      - name: apiName
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      tags: [Records]
+      summary: List records (paginated, newest first)
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Paginated record list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags: [Records]
+      summary: Create a record
+      description: |
+        Inserts a row into `cm_{apiName}`. Only keys matching active field `apiName` values
+        are used — unknown keys are silently ignored. System columns (`id`, `created_at`,
+        `updated_at`, `created_by`, `updated_by`) must not be sent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            example:
+              location: San Francisco
+              price: 1250000
+              active_listing: true
+      responses:
+        '201':
+          description: Record created — returns full row including system columns
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DynamicRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/modules/{apiName}/records/{id}:
+    parameters:
+      - name: apiName
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags: [Records]
+      summary: Get a single record
+      responses:
+        '200':
+          description: Record found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DynamicRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Records]
+      summary: Partial update a record
+      description: |
+        Only fields present in the request body are updated. Omitted fields are unchanged.
+        System columns cannot be updated.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            example:
+              price: 1199000
+              active_listing: false
+      responses:
+        '200':
+          description: Record updated — returns full row
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DynamicRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Records]
+      summary: Delete a record
+      responses:
+        '204':
+          description: Deleted — no body
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Health ──────────────────────────────────────────────────────────────────
+  /actuator/health:
+    get:
+      tags: [Auth]
+      summary: Server health check
+      security: []
+      responses:
+        '200':
+          description: Server is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: UP

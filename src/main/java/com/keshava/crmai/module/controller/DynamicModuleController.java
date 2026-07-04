@@ -3,6 +3,7 @@ package com.keshava.crmai.module.controller;
 import com.keshava.crmai.module.dto.FieldRequest;
 import com.keshava.crmai.module.dto.ModuleRequest;
 import com.keshava.crmai.module.dto.RecordPage;
+import com.keshava.crmai.module.dto.UpdateModuleRequest;
 import com.keshava.crmai.module.entity.DynamicField;
 import com.keshava.crmai.module.entity.DynamicModule;
 import com.keshava.crmai.module.service.DynamicFieldService;
@@ -42,6 +43,13 @@ public class DynamicModuleController {
     @GetMapping("/{apiName}")
     public ResponseEntity<DynamicModule> getModule(@PathVariable String apiName) {
         return ResponseEntity.ok(moduleService.getModule(apiName));
+    }
+
+    @PutMapping("/{apiName}")
+    public ResponseEntity<DynamicModule> updateModule(
+            @PathVariable String apiName,
+            @Valid @RequestBody UpdateModuleRequest request) {
+        return ResponseEntity.ok(moduleService.updateModule(apiName, request));
     }
 
     @DeleteMapping("/{apiName}")

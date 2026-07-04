@@ -81,15 +81,15 @@ public class DynamicFieldService {
 
     private String toSqlType(DynamicField.FieldType type) {
         return switch (type) {
-            case TEXT, MULTI_PICKLIST -> "TEXT";
-            case NUMBER -> "NUMERIC(20,4)";
-            case DATE -> "DATE";
-            case DATETIME -> "TIMESTAMP";
-            case PICKLIST, EMAIL -> "VARCHAR(255)";
-            case PHONE -> "VARCHAR(50)";
-            case URL -> "VARCHAR(500)";
-            case LOOKUP -> "UUID";
-            case BOOLEAN -> "BOOLEAN";
+            case TEXT, EMAIL -> "VARCHAR(255)";
+            case TEXT_AREA    -> "TEXT";
+            case PHONE_NO     -> "VARCHAR(50)";
+            case DATE         -> "DATE";
+            case NUMBER       -> "NUMERIC(20,4)";
+            case CHECKBOX     -> "BOOLEAN";
+            case CURRENCY     -> "NUMERIC(20,2)";
+            case URL          -> "VARCHAR(500)";
+            case AUTO_NUMBER  -> "BIGINT GENERATED ALWAYS AS IDENTITY";
         };
     }
 }
